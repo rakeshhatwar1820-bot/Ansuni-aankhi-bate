@@ -11,21 +11,44 @@ jobs:
       - uses: actions/setup-java@v5
         with: { distribution: 'temurin', java-version: '17' }
 
-      - name: Auto Fix Structure
+      - name: Auto Fix All Imports
         run: |
-          mkdir -p src/components src/services
+          mkdir -p src/components src/services src/data
+          
+          # 1. Move files to correct place
           [ -f App.tsx ] && mv App.tsx src/App.tsx || true
           [ -f main.tsx ] && mv main.tsx src/main.tsx || true
           [ -f index.css ] && mv index.css src/index.css || true
           for f in AdminDashboard.tsx AndroidAppModal.tsx HeroSection.tsx Navbar.tsx FavoritesModal.tsx Footer.tsx PoetryCard.tsx PoetryDetailModal.tsx ProjectFilesModal.tsx QuoteCardGeneratorModal.tsx; do [ -f $f ] && mv $f src/components/ || true; done
-          for f in ambientAudio.ts androidProjectGenerator.ts audioSpeech.ts storage.ts poetry.ts defaultPoetry.ts; do [ -f $f ] && mv $f src/services/ 2>/dev/null || mv $f src/ 2>/dev/null || true; done
-          cat > src/main.tsx << 'EOF'
-          import React from 'react'
-          import ReactDOM from 'react-dom/client'
-          import App from './App.tsx'
-          import './index.css'
-          ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>)
+          for f in ambientAudio.ts androidProjectGenerator.ts audioSpeech.ts storage.ts poetry.ts defaultPoetry.ts; do [ -f $f ] && mv $f src/services/ || true; done
+          for f in src/poetry.ts src/defaultPoetry.ts; do [ -f $f ] && mv $f src/services/ || true; done
+
+          # 2. Create src/data/defaultPoetry.ts (yehi missing tha)
+          if [ -f src/services/defaultPoetry.ts ]; then
+            cp src/services/defaultPoetry.ts src/data/defaultPoetry.ts
+          elif [ -f src/services/poetry.ts ]; then
+            cp src/services/poetry.ts src/data/defaultPoetry.ts
+          else
+            echo "Creating dummy defaultPoetry"
+            cat > src/data/defaultPoetry.ts << 'EOF'
+          export const CATEGORY_LABELS: any = { love: "Love", sad: "Sad", life: "Life" };
+          export const MOOD_TAGS: any = ["love", "sad", "life"];
+          export const defaultPoetry: any = [];
+          export default defaultPoetry;
           EOF
+          fi
+          
+          # Also create poetry.ts in data if needed
+          cp src/data/defaultPoetry.ts src/data/poetry.ts || true
+          cp src/data/defaultPoetry.ts src/services/poetry.ts || true
+          
+          # 3. Fix all wrong import paths in components
+          sed -i "s|\.\./data/defaultPoetry|../data/defaultPoetry|g" src/components/*.tsx || true
+          sed -i "s|\.\./\.\./data/defaultPoetry|../data/defaultPoetry|g" src/components/*.tsx || true
+          sed -i "s|from '\.\./data/|from '../data/|g" src/components/*.tsx || true
+          sed -i "s|from \"\.\./data/|from \"../data/|g" src/components/*.tsx || true
+          
+          # Create index.html and vite.config if missing
           cat > index.html << 'EOF'
           <!DOCTYPE html><html><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Ansuni Ankahi Bate</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
           EOF
@@ -34,7 +57,18 @@ jobs:
           import react from '@vitejs/plugin-react'
           export default defineConfig({ plugins: [react()] })
           EOF
-          find src -type f
+          cat > src/main.tsx << 'EOF'
+          import React from 'react'
+          import ReactDOM from 'react-dom/client'
+          import App from './App.tsx'
+          import './index.css'
+          ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>)
+          EOF
+          
+          echo "=== FINAL STRUCTURE ==="
+          find src -type f | sort
+          echo "=== Checking PoetryDetailModal ==="
+          head -20 src/components/PoetryDetailModal.tsx
 
       - name: Build
         run: |
